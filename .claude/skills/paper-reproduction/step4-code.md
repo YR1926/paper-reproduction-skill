@@ -30,8 +30,66 @@
 - 整合参考脚本的合理功能（resize、ref/noref 模式等）
 - 同步更新 `Claude-require.txt` 添加新依赖（如 `lpips`）
 
-## 6. 生成批量测试脚本
-多测试集时自动生成 `run_tests.sh`：
+## 6. 测试执行
+
+### 6.1 单数据集
+直接调用测试脚本：
+```bash
+python test.py --val_dir <data_path> --mode ref --resize 256 --result_dir results/<name>
+```
+
+### 6.2 多数据集（优先使用统一脚本）
+
+1. **分析 test.py 的 CLI 接口**：读取 test.py，确定数据集路径参数名（`--val_dir`/`--test_dir`/`--data_dir`）和结果路径参数名（`--result_dir`/`--save_dir`/`--output_dir`）
+
+2. **生成测试配置文件** `test_config.json`：
+```json
+{
+  "test_script": "test.py",
+  "path_arg": "--val_dir",
+  "result_arg": "--result_dir",
+  "result_base": "results",
+  "common": {
+    "weight": "checkpoints/best.pth"
+  },
+  "datasets": [
+    {"name": "EUVP", "path": "datasets/test/EUVP/input"},
+    {"name": "LSUI", "path": "datasets/test/LSUI/input"},
+    {"name": "UIEB", "path": "datasets/test/UIEB/input"}
+  ]
+}
+```
+- `common`：所有测试集共享的参数。**只填源码实际使用的参数，禁止添加源码中不存在的参数。** 参数值使用源码默认值，未经用户确认不得修改。
+- `datasets[].override`：单个测试集需要覆盖的参数（可选），不写则完全使用 common
+- `path_arg` / `result_arg`：根据 test.py 的实际 CLI 确定
+
+3. **resize 参数特殊处理**：如果源码 test.py 未明确指定输入尺寸（无默认值、无 hardcode），必须询问用户：
+   ```
+   ⚠️ 源码未指定测试输入尺寸，请选择：
+   A. resize=256（推荐，大多数论文使用）
+   B. 不 resize（使用原始尺寸）
+   C. 自定义尺寸（输入具体数值）
+   ```
+   用户选择后再将对应参数加入 `common`。源码已有默认尺寸 → 不询问，直接使用源码值。
+
+4. **调用统一脚本执行**：
+```bash
+python scripts/test_runner.py --config test_config.json
+```
+
+5. **脚本行为**：
+   - 遍历 datasets 列表，逐条执行 `python test.py ...`
+   - 每个测试集的结果输出到 `result_base/<name>/` 独立目录
+   - 逐条报告成功/失败状态和耗时
+   - 最终汇总：成功数/失败数/总耗时
+
+### 6.3 回退条件（以下情况不使用统一脚本，改为原有方式）
+- 不同测试集需要完全不同的 CLI 参数组合（不仅是 override 能解决的）
+- 测试脚本不支持 CLI 传参（路径硬编码在代码中）
+- `test_runner.py` 执行失败
+- 用户明确要求不同的运行方式
+
+回退方式：生成 `run_tests.sh`：
 ```bash
 # 每个测试集独立运行，结果输出到独立目录
 python test.py --val_dir <path> --mode ref --resize 256 --result_dir results/<name>
@@ -83,10 +141,11 @@ conda activate <env_name>
 cd <source_dir>
 python train_supervision.py
 
-# 测试（4个集独立运行）
-bash run_tests.sh <checkpoint_path>
-# 或逐个运行：
-python test.py --val_dir <path> --mode ref --resize 256 --weight <ckpt> --result_dir results/<name>
+# 测试（单数据集）
+python test.py --val_dir <data_path> --mode ref --resize 256 --weight <ckpt> --result_dir results/<name>
+
+# 测试（多数据集）
+python scripts/test_runner.py --config test_config.json
 ```
 
 ## 错误处理

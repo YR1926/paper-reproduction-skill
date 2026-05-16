@@ -34,12 +34,26 @@
   - 空目录
   - 多余子目录（如 test-LSUI 有 input1/target1 可能是预处理过的副本）
 
-### 4. 制定映射方案
+### 4. 制定映射方案并生成迁移配置
 - 对比：源码期望的目录名 vs 用户实际的目录名 → 得出映射关系
 - **映射的是目录名，不是固定规则**：每次根据实际分析结果决定
 - 多个数据集需要合并到一个 val/test 目录时，先检测文件名冲突
-- **优先使用软链接**（Linux/Mac: `ln -s`，Windows: `mklink /J` for 目录, `ln -s` for 文件），不可用时复制
+- **优先使用软链接**（Linux/Mac: `ln -s`，Windows: `mklink /J` for 目录），不可用时自动回退复制
 - 用户指定了命名要求（如"data改成datasets"），使用用户指定的名称
+- **生成迁移配置文件** `migrate_config.json`，格式如下：
+  ```json
+  {
+    "mappings": [
+      {"src": "Dataset/train/input", "dst": "UIR-Net-src/datasets/train/images"},
+      {"src": "Dataset/train/target", "dst": "UIR-Net-src/datasets/train/labels"},
+      {"src": "Dataset/val/input", "dst": "UIR-Net-src/datasets/val/images"},
+      {"src": "Dataset/val/target", "dst": "UIR-Net-src/datasets/val/labels"}
+    ]
+  }
+  ```
+  - `src`：用户数据集的实际路径（相对路径）
+  - `dst`：源码期望的数据集路径（相对路径）
+  - 每对 `src`/`dst` 一一对应
 
 ### 5. 询问用户（仅在以下情况）
 - 源码的目录期望无法从代码中确定（太模糊）
@@ -48,8 +62,19 @@
 - 用户明确要求"需要确认后再执行"
 - 其他情况直接执行，不询问
 
-### 6. 执行并报告
-- 按方案创建目录结构 + 软链接/复制
+### 6. 执行迁移（使用统一脚本）
+- 调用项目自带的迁移脚本执行：
+  ```bash
+  python scripts/migrate_datasets.py --config migrate_config.json
+  ```
+- 脚本行为：
+  - 遍历 `mappings` 中的每对路径，逐一迁移
+  - 默认 `auto` 模式：优先符号链接 → 失败自动回退复制
+  - 自动创建目标父目录
+  - 逐条报告成功/失败状态
+- **如果脚本执行失败（存在失败条目）**：
+  - 对失败的条目逐一回退到手动处理：`mkdir -p` + `ln -s` 或 `cp -r`
+  - 仍失败则标记并告知用户
 - 完成后列出最终结构：
   ```
   datasets/train/images/ → 5600 files (linked)
