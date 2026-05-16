@@ -1,0 +1,17 @@
+# Personal settings (contains local paths)
+.claude/settings.local.json
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE
+.vscode/
+.idea/
+
+# Temp files
+*.tmp
+*.swp
+*.swo
+*~
