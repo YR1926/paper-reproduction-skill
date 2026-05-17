@@ -2,6 +2,12 @@
 """
 统一测试运行脚本 —— 遍历测试集列表，逐个调用 test.py 并输出到独立结果目录。
 
+特性:
+  - 默认遇错即停：中途任何一个测试失败，立即终止后续测试
+  - 默认失败回滚：终止后自动删除本次批量测试产生的所有结果目录，恢复到测试前状态
+  - 使用 --continue-on-failure 可恢复旧行为（失败后继续运行）
+  - 使用 --no-rollback 可保留已完成的结果目录
+
 用法:
   python scripts/test_runner.py --config test_config.json
 
@@ -34,6 +40,7 @@
 
 import argparse
 import json
+import shutil
 import subprocess
 import sys
 import time
@@ -110,10 +117,31 @@ def run_one(test_script: str, args: list[str]) -> dict:
         }
 
 
+def rollback_results(result_dirs: dict[str, Path], pre_existing: dict[str, bool]) -> None:
+    """回滚：删除本次批量测试产生的所有结果目录。"""
+    print(f"\n[回滚] 删除本次测试产生的所有结果目录...")
+    for name, result_dir in result_dirs.items():
+        if not result_dir.exists():
+            continue
+        if pre_existing.get(name, False):
+            print(f"  跳过（测试前已存在）: {result_dir}")
+            continue
+        try:
+            shutil.rmtree(result_dir)
+            print(f"  已删除: {result_dir}")
+        except Exception as e:
+            print(f"  删除失败: {result_dir} ({e})")
+    print("[回滚] 完成。")
+
+
 def main():
     parser = argparse.ArgumentParser(description="统一测试运行脚本")
     parser.add_argument("--config", required=True, help="测试配置 JSON 文件路径")
     parser.add_argument("--dry-run", action="store_true", help="仅打印命令，不实际执行")
+    parser.add_argument("--continue-on-failure", action="store_true",
+                        help="即使某个测试失败也继续运行后续测试（默认：遇错即停并回滚）")
+    parser.add_argument("--no-rollback", action="store_true",
+                        help="失败时不删除已完成的测试结果（默认：回滚已完成的测试结果）")
     args = parser.parse_args()
 
     config_path = Path(args.config)
@@ -131,11 +159,27 @@ def main():
             print(f"  python {test_script} " + " ".join(cmd_args))
         sys.exit(0)
 
+    # 构建每个数据集对应的结果目录路径
+    base = Path(config["result_base"])
+    result_dirs: dict[str, Path] = {}
+    for ds in config["datasets"]:
+        result_dirs[ds["name"]] = base / ds["name"]
+
+    # 记录测试前哪些结果目录已经存在
+    pre_existing = {name: result_dir.exists() for name, result_dir in result_dirs.items()}
+
+    stop_on_failure = not args.continue_on_failure
+    do_rollback = not args.no_rollback
+
     print(f"测试脚本: {test_script}")
     print(f"测试集数: {len(config['datasets'])}")
-    print(f"结果目录: {config['result_base']}/<name>\n")
+    print(f"结果目录: {config['result_base']}/<name>")
+    if stop_on_failure:
+        print(f"模式: 遇错即停 + 失败回滚")
+    print()
 
     results = []
+    failed = False
     for i, ds in enumerate(config["datasets"], 1):
         name = ds["name"]
         print(f"[{i}/{len(config['datasets'])}] {name} ... ", end="", flush=True)
@@ -148,10 +192,17 @@ def main():
         else:
             print(f"FAIL (rc={r['returncode']})")
             if r["stderr"]:
-                # 只打印最后几行错误
                 lines = r["stderr"].strip().split("\n")
                 for line in lines[-8:]:
                     print(f"  {line}")
+            failed = True
+            if stop_on_failure:
+                print(f"\n[中断] {name} 测试失败，停止后续测试。")
+                break
+
+    # 失败时回滚
+    if failed and do_rollback:
+        rollback_results(result_dirs, pre_existing)
 
     # 汇总
     ok = sum(1 for r in results if r["success"])
