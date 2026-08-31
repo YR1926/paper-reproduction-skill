@@ -1,3 +1,5 @@
+
+
 # 论文复现全流程 Skill (Paper Reproduction Skill)
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -32,8 +34,8 @@
 将本仓库的 `.claude/skills/` 目录复制到你的项目根目录：
 
 ```bash
-git clone https://github.com/<your-username>/paper-reproduction.git
-cp -r paper-reproduction/.claude/skills/ <your-project>/.claude/
+git clone https://github.com/<your-username>/paper-reproduction-skill.git
+cp -r paper-reproduction-skill/.claude/skills/ <your-project>/.claude/
 ```
 
 或者直接作为你的项目模板使用。
@@ -104,8 +106,8 @@ A Claude Code skill that automates the full paper reproduction pipeline. It cove
 Copy the `.claude/skills/` directory to your project root:
 
 ```bash
-git clone https://github.com/<your-username>/paper-reproduction.git
-cp -r paper-reproduction/.claude/skills/ <your-project>/.claude/
+git clone https://github.com/<your-username>/paper-reproduction-skill.git
+cp -r paper-reproduction-skill/.claude/skills/ <your-project>/.claude/
 ```
 
 Or use this repository directly as your project template.
